@@ -36,7 +36,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * Integration tests for {@link OAuth2ResourceServerApplication}
+ * Integration tests for {@link OAuth2ResourceServerJweApplication}
  *
  * @author Josh Cummings
  */

@@ -23,9 +23,9 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  * @author Josh Cummings
  */
 @SpringBootApplication
-public class OAuth2ResourceServerApplication {
+public class OAuth2ResourceServerJweApplication {
 
 	public static void main(String[] args) {
-		SpringApplication.run(OAuth2ResourceServerApplication.class, args);
+		SpringApplication.run(OAuth2ResourceServerJweApplication.class, args);
 	}
 }

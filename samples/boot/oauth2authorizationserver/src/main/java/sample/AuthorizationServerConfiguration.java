@@ -46,6 +46,7 @@ import org.springframework.security.oauth2.config.annotation.configurers.ClientD
 import org.springframework.security.oauth2.config.annotation.web.configuration.AuthorizationServerConfigurerAdapter;
 import org.springframework.security.oauth2.config.annotation.web.configuration.EnableAuthorizationServer;
 import org.springframework.security.oauth2.config.annotation.web.configurers.AuthorizationServerEndpointsConfigurer;
+import org.springframework.security.oauth2.config.annotation.web.configurers.AuthorizationServerSecurityConfigurer;
 import org.springframework.security.oauth2.provider.OAuth2Authentication;
 import org.springframework.security.oauth2.provider.endpoint.FrameworkEndpoint;
 import org.springframework.security.oauth2.provider.token.DefaultAccessTokenConverter;
@@ -101,17 +102,24 @@ public class AuthorizationServerConfiguration extends AuthorizationServerConfigu
 				.secret("{noop}secret")
 				.scopes("message:read")
 				.accessTokenValiditySeconds(600_000_000)
-				.and()
+			.and()
 			.withClient("writer")
 				.authorizedGrantTypes("password")
 				.secret("{noop}secret")
 				.scopes("message:write")
 				.accessTokenValiditySeconds(600_000_000)
-				.and()
+			.and()
 			.withClient("noscopes")
 				.authorizedGrantTypes("password")
 				.secret("{noop}secret")
 				.scopes("none")
+				.accessTokenValiditySeconds(600_000_000)
+			.and()
+			.withClient("authorizedCode")
+				.authorizedGrantTypes("authorization_code")
+				.secret("{noop}secret")
+				.scopes("message:read")
+				.redirectUris("www.baidu.com")
 				.accessTokenValiditySeconds(600_000_000);
 		// @formatter:on
 	}
@@ -128,6 +136,17 @@ public class AuthorizationServerConfiguration extends AuthorizationServerConfigu
 				.accessTokenConverter(accessTokenConverter());
 		}
 		// @formatter:on
+	}
+
+	@Override
+	public void configure(AuthorizationServerSecurityConfigurer oauthServer) throws Exception {
+		oauthServer
+//			.realm("oauth2-resources")
+//			url:/oauth/token_key,exposes public key for token verification if using JWT tokens
+//			.tokenKeyAccess("permitAll()")
+//			url:/oauth/check_token allow check token
+//			.checkTokenAccess("isAuthenticated()")
+			.allowFormAuthenticationForClients();
 	}
 
 	@Bean

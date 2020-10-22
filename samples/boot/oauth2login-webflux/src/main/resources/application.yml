@@ -27,9 +27,22 @@ spring:
           okta:
             client-id: your-app-client-id
             client-secret: your-app-client-secret
+          springoauth2authserver:
+            client-id: authorizedCode
+            client-secret: secret
+            authorizationGrantType: authorization_code
+            scope: message:read
+            redirectUri: http://localhost:8080
+
         provider:
           okta:
             authorization-uri: https://your-subdomain.oktapreview.com/oauth2/v1/authorize
             token-uri: https://your-subdomain.oktapreview.com/oauth2/v1/token
             user-info-uri: https://your-subdomain.oktapreview.com/oauth2/v1/userinfo
             jwk-set-uri: https://your-subdomain.oktapreview.com/oauth2/v1/keys
+          springoauth2authserver:
+            authorization-uri: http://localhost:8081/oauth/authorize
+            token-uri: http://localhost:8081/oauth/token
+            jwk-set-uri: http://localhost:8081/.well-known/jwks.json
+            user-info-uri: http://localhost:8101
+
