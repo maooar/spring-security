@@ -33,6 +33,7 @@ import com.nimbusds.jose.jwk.RSAKey;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -47,9 +48,13 @@ import org.springframework.security.oauth2.config.annotation.web.configuration.A
 import org.springframework.security.oauth2.config.annotation.web.configuration.EnableAuthorizationServer;
 import org.springframework.security.oauth2.config.annotation.web.configurers.AuthorizationServerEndpointsConfigurer;
 import org.springframework.security.oauth2.config.annotation.web.configurers.AuthorizationServerSecurityConfigurer;
+import org.springframework.security.oauth2.provider.ClientDetailsService;
 import org.springframework.security.oauth2.provider.OAuth2Authentication;
+import org.springframework.security.oauth2.provider.client.InMemoryClientDetailsService;
+import org.springframework.security.oauth2.provider.client.JdbcClientDetailsService;
 import org.springframework.security.oauth2.provider.endpoint.FrameworkEndpoint;
 import org.springframework.security.oauth2.provider.token.DefaultAccessTokenConverter;
+import org.springframework.security.oauth2.provider.token.DefaultTokenServices;
 import org.springframework.security.oauth2.provider.token.DefaultUserAuthenticationConverter;
 import org.springframework.security.oauth2.provider.token.TokenStore;
 import org.springframework.security.oauth2.provider.token.store.InMemoryTokenStore;
@@ -81,6 +86,7 @@ public class AuthorizationServerConfiguration extends AuthorizationServerConfigu
 	AuthenticationManager authenticationManager;
 	KeyPair keyPair;
 	boolean jwtEnabled;
+	TokenStore tokenStore;
 
 	public AuthorizationServerConfiguration(
 			AuthenticationConfiguration authenticationConfiguration,
@@ -95,6 +101,7 @@ public class AuthorizationServerConfiguration extends AuthorizationServerConfigu
 	@Override
 	public void configure(ClientDetailsServiceConfigurer clients)
 			throws Exception {
+		clients.withClientDetails(clientDetails());
 		// @formatter:off
 		clients.inMemory()
 			.withClient("reader")
@@ -115,12 +122,15 @@ public class AuthorizationServerConfiguration extends AuthorizationServerConfigu
 				.scopes("none")
 				.accessTokenValiditySeconds(600_000_000)
 			.and()
-			.withClient("authorizedCode")
-				.authorizedGrantTypes("authorization_code")
+			.withClient("demo")
+				.authorizedGrantTypes("authorization_code", "client_credentials", "refresh_token","password", "implicit")
 				.secret("{noop}secret")
 				.scopes("message:read")
+				.accessTokenValiditySeconds(600_000_000)
 				.redirectUris("www.baidu.com")
-				.accessTokenValiditySeconds(600_000_000);
+				.accessTokenValiditySeconds(10)
+				.refreshTokenValiditySeconds(20)
+		;
 		// @formatter:on
 	}
 
@@ -151,23 +161,80 @@ public class AuthorizationServerConfiguration extends AuthorizationServerConfigu
 
 	@Bean
 	public TokenStore tokenStore() {
-		if (this.jwtEnabled) {
-			return new JwtTokenStore(accessTokenConverter());
-		} else {
-			return new InMemoryTokenStore();
+		if(this.tokenStore != null) {
+			return this.tokenStore;
 		}
+		if (this.jwtEnabled) {
+			this.tokenStore = new JwtTokenStore(accessTokenConverter());
+		} else {
+			this.tokenStore = new InMemoryTokenStore();
+		}
+		return this.tokenStore;
 	}
 
 	@Bean
 	public JwtAccessTokenConverter accessTokenConverter() {
-		JwtAccessTokenConverter converter = new JwtAccessTokenConverter();
-		converter.setKeyPair(this.keyPair);
-
 		DefaultAccessTokenConverter accessTokenConverter = new DefaultAccessTokenConverter();
 		accessTokenConverter.setUserTokenConverter(new SubjectAttributeUserTokenConverter());
+		JwtAccessTokenConverter converter = new JwtAccessTokenConverter();
+		converter.setKeyPair(this.keyPair);
 		converter.setAccessTokenConverter(accessTokenConverter);
-
 		return converter;
+	}
+
+	@Bean
+	public ClientDetailsService clientDetails() {
+		JdbcClientDetailsService jdbcClientDetailsService=new JdbcClientDetailsService(dataSource);
+		jdbcClientDetailsService.setPasswordEncoder(new BCryptPasswordEncoder());
+		InMemoryClientDetailsService InMemoryClientDetailsService=new InMemoryClientDetailsService();
+		InMemoryClientDetailsService.setClientDetailsStore();
+		clients.inMemory()
+				.withClient("reader")
+				.authorizedGrantTypes("password")
+				.secret("{noop}secret")
+				.scopes("message:read")
+				.accessTokenValiditySeconds(600_000_000)
+				.and()
+				.withClient("writer")
+				.authorizedGrantTypes("password")
+				.secret("{noop}secret")
+				.scopes("message:write")
+				.accessTokenValiditySeconds(600_000_000)
+				.and()
+				.withClient("noscopes")
+				.authorizedGrantTypes("password")
+				.secret("{noop}secret")
+				.scopes("none")
+				.accessTokenValiditySeconds(600_000_000)
+				.and()
+				.withClient("demo")
+				.authorizedGrantTypes("authorization_code", "client_credentials", "refresh_token","password", "implicit")
+				.secret("{noop}secret")
+				.scopes("message:read")
+				.accessTokenValiditySeconds(600_000_000)
+				.redirectUris("www.baidu.com")
+				.accessTokenValiditySeconds(10)
+				.refreshTokenValiditySeconds(20)
+		;
+		return jdbcClientDetailsService;
+	}
+
+	/**
+	 * <p>注意，自定义TokenServices的时候，需要设置@Primary，否则报错，</p>
+	 * @return
+	 */
+	@Primary
+	@Bean
+	public DefaultTokenServices defaultTokenServices() {
+		DefaultTokenServices tokenServices = new DefaultTokenServices();
+		tokenServices.setTokenStore(tokenStore());
+		tokenServices.setSupportRefreshToken(true);
+		tokenServices.setClientDetailsService(clientDetails());
+		// token有效期自定义设置，默认12小时
+		tokenServices.setAccessTokenValiditySeconds(60 * 60 * 12);
+		//默认30天，这里修改
+		tokenServices.setRefreshTokenValiditySeconds(60 * 60 * 24 * 7);
+		return tokenServices;
 	}
 }
 
@@ -181,12 +248,13 @@ class UserConfig extends WebSecurityConfigurerAdapter {
 	protected void configure(HttpSecurity http) throws Exception {
 		http
 			.authorizeRequests()
-				.mvcMatchers("/.well-known/jwks.json").permitAll()
-				.anyRequest().authenticated()
-				.and()
-			.httpBasic()
-				.and()
-			.csrf().ignoringRequestMatchers((request) -> "/introspect".equals(request.getRequestURI()));
+			.mvcMatchers("/.well-known/jwks.json")
+			.permitAll()
+			.anyRequest().authenticated()
+			.and()
+				.httpBasic()
+			.and()
+				.csrf().ignoringRequestMatchers((request) -> "/introspect".equals(request.getRequestURI()));
 	}
 
 	@Bean
@@ -301,3 +369,26 @@ class SubjectAttributeUserTokenConverter extends DefaultUserAuthenticationConver
 		return response;
 	}
 }
+
+/**
+ * I created this Class extending the JWTAccesTokenConverter that in case the existing
+ * refresh token is already a valid JWT it replaced it with the existing one
+*/
+//class PreserveRefreshTokenJwtAcesTokenConverter extends JwtAccessTokenConverter implements TokenEnhancer {
+//	private static final Logger LOG =LoggerFactory.getLogger(PreserveRefreshTokenJwtAcesTokenConverter.class);
+//	@Override
+//	public OAuth2AccessToken enhance(OAuth2AccessToken accessToken, OAuth2Authentication authentication) {
+//		OAuth2RefreshToken refreshToken = accessToken.getRefreshToken();
+//		OAuth2AccessToken converted = super.enhance(accessToken, authentication);
+//		if(refreshToken!=null&& refreshToken.getValue()!=null) {
+//			//Preserve previous refresh token if it was already a valid JWT token.
+//			try {
+//				JwtHelper.decode(refreshToken.getValue());
+//				((DefaultOAuth2AccessToken)converted).setRefreshToken(refreshToken);
+//			}catch(IllegalArgumentException e) {
+//				LOG.debug("Existing refresh token is not a valid JWT, using the new generated refresh token",e);
+//			}
+//		}
+//		return converted;
+//	}
+//}
