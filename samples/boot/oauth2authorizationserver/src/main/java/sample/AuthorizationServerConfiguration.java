@@ -22,34 +22,44 @@ import java.security.KeyPair;
 import java.security.interfaces.RSAPublicKey;
 import java.security.spec.RSAPrivateKeySpec;
 import java.security.spec.RSAPublicKeySpec;
-import java.util.HashMap;
-import java.util.LinkedHashMap;
-import java.util.Map;
+import java.util.*;
 import java.util.stream.Collectors;
 
 import com.nimbusds.jose.jwk.JWKSet;
 import com.nimbusds.jose.jwk.RSAKey;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
 import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.config.annotation.authentication.builders.AuthenticationManagerBuilder;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.WebSecurityConfigurerAdapter;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.AuthorityUtils;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.User;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.common.OAuth2AccessToken;
+import org.springframework.security.oauth2.config.annotation.builders.ClientDetailsServiceBuilder;
+import org.springframework.security.oauth2.config.annotation.builders.InMemoryClientDetailsServiceBuilder;
 import org.springframework.security.oauth2.config.annotation.configurers.ClientDetailsServiceConfigurer;
 import org.springframework.security.oauth2.config.annotation.web.configuration.AuthorizationServerConfigurerAdapter;
 import org.springframework.security.oauth2.config.annotation.web.configuration.EnableAuthorizationServer;
 import org.springframework.security.oauth2.config.annotation.web.configurers.AuthorizationServerEndpointsConfigurer;
 import org.springframework.security.oauth2.config.annotation.web.configurers.AuthorizationServerSecurityConfigurer;
+import org.springframework.security.oauth2.provider.ClientDetails;
 import org.springframework.security.oauth2.provider.ClientDetailsService;
 import org.springframework.security.oauth2.provider.OAuth2Authentication;
+import org.springframework.security.oauth2.provider.client.BaseClientDetails;
 import org.springframework.security.oauth2.provider.client.InMemoryClientDetailsService;
 import org.springframework.security.oauth2.provider.client.JdbcClientDetailsService;
 import org.springframework.security.oauth2.provider.endpoint.FrameworkEndpoint;
@@ -102,36 +112,6 @@ public class AuthorizationServerConfiguration extends AuthorizationServerConfigu
 	public void configure(ClientDetailsServiceConfigurer clients)
 			throws Exception {
 		clients.withClientDetails(clientDetails());
-		// @formatter:off
-		clients.inMemory()
-			.withClient("reader")
-				.authorizedGrantTypes("password")
-				.secret("{noop}secret")
-				.scopes("message:read")
-				.accessTokenValiditySeconds(600_000_000)
-			.and()
-			.withClient("writer")
-				.authorizedGrantTypes("password")
-				.secret("{noop}secret")
-				.scopes("message:write")
-				.accessTokenValiditySeconds(600_000_000)
-			.and()
-			.withClient("noscopes")
-				.authorizedGrantTypes("password")
-				.secret("{noop}secret")
-				.scopes("none")
-				.accessTokenValiditySeconds(600_000_000)
-			.and()
-			.withClient("demo")
-				.authorizedGrantTypes("authorization_code", "client_credentials", "refresh_token","password", "implicit")
-				.secret("{noop}secret")
-				.scopes("message:read")
-				.accessTokenValiditySeconds(600_000_000)
-				.redirectUris("www.baidu.com")
-				.accessTokenValiditySeconds(10)
-				.refreshTokenValiditySeconds(20)
-		;
-		// @formatter:on
 	}
 
 	@Override
@@ -184,39 +164,24 @@ public class AuthorizationServerConfiguration extends AuthorizationServerConfigu
 
 	@Bean
 	public ClientDetailsService clientDetails() {
-		JdbcClientDetailsService jdbcClientDetailsService=new JdbcClientDetailsService(dataSource);
-		jdbcClientDetailsService.setPasswordEncoder(new BCryptPasswordEncoder());
+//		JdbcClientDetailsService jdbcClientDetailsService=new JdbcClientDetailsService(dataSource);
+//		jdbcClientDetailsService.setPasswordEncoder(new BCryptPasswordEncoder());
 		InMemoryClientDetailsService InMemoryClientDetailsService=new InMemoryClientDetailsService();
-		InMemoryClientDetailsService.setClientDetailsStore();
-		clients.inMemory()
-				.withClient("reader")
-				.authorizedGrantTypes("password")
-				.secret("{noop}secret")
-				.scopes("message:read")
-				.accessTokenValiditySeconds(600_000_000)
-				.and()
-				.withClient("writer")
-				.authorizedGrantTypes("password")
-				.secret("{noop}secret")
-				.scopes("message:write")
-				.accessTokenValiditySeconds(600_000_000)
-				.and()
-				.withClient("noscopes")
-				.authorizedGrantTypes("password")
-				.secret("{noop}secret")
-				.scopes("none")
-				.accessTokenValiditySeconds(600_000_000)
-				.and()
-				.withClient("demo")
-				.authorizedGrantTypes("authorization_code", "client_credentials", "refresh_token","password", "implicit")
-				.secret("{noop}secret")
-				.scopes("message:read")
-				.accessTokenValiditySeconds(600_000_000)
-				.redirectUris("www.baidu.com")
-				.accessTokenValiditySeconds(10)
-				.refreshTokenValiditySeconds(20)
-		;
-		return jdbcClientDetailsService;
+		Map<String, ClientDetails> map = new HashMap();
+		BaseClientDetails details = new BaseClientDetails();
+//		details.setClientId(UUID.randomUUID().toString());
+//		details.setClientSecret(UUID.randomUUID().toString());
+		details.setClientId("demo");
+		details.setClientSecret("{noop}secret");
+		details.setAuthorizedGrantTypes(Arrays.asList("authorization_code", "password", "client_credentials","implicit", "refresh_token"));
+		details.setScope(Arrays.asList("message:read"));
+//		details.setAuthorities(AuthorityUtils.commaSeparatedStringToAuthorityList("ROLE_USER"));
+		details.setRegisteredRedirectUri(Collections.<String>emptySet());
+		details.setAccessTokenValiditySeconds(10);
+		details.setRefreshTokenValiditySeconds(20);
+		map.put(details.getClientId(),details);
+		InMemoryClientDetailsService.setClientDetailsStore(map);
+		return InMemoryClientDetailsService;
 	}
 
 	/**
@@ -234,6 +199,7 @@ public class AuthorizationServerConfiguration extends AuthorizationServerConfigu
 		tokenServices.setAccessTokenValiditySeconds(60 * 60 * 12);
 		//默认30天，这里修改
 		tokenServices.setRefreshTokenValiditySeconds(60 * 60 * 24 * 7);
+		tokenServices.setReuseRefreshToken(false);
 		return tokenServices;
 	}
 }
@@ -257,16 +223,33 @@ class UserConfig extends WebSecurityConfigurerAdapter {
 				.csrf().ignoringRequestMatchers((request) -> "/introspect".equals(request.getRequestURI()));
 	}
 
-	@Bean
 	@Override
-	public UserDetailsService userDetailsService() {
-		return new InMemoryUserDetailsManager(
-				User.withDefaultPasswordEncoder()
-					.username("subject")
-					.password("password")
-					.roles("USER")
-					.build());
+	protected void configure(AuthenticationManagerBuilder auth) throws Exception {
+		// 加入自定义的安全认证
+		auth.userDetailsService(new MyUserDetailService())
+			.passwordEncoder(this.passwordEncoder())
+//			.and()
+			//添加自定义的认证管理类
+//			.authenticationProvider(smsAuthenticationProvider())
+//			.authenticationProvider(authenticationProvider())
+		;
 	}
+
+	@Bean
+	public PasswordEncoder passwordEncoder(){
+		return new BCryptPasswordEncoder();
+	}
+
+//	@Bean
+//	@Override
+//	public UserDetailsService userDetailsService() {
+//		return new InMemoryUserDetailsManager(
+//				User.withDefaultPasswordEncoder()
+//					.username("subject")
+//					.password("password")
+//					.roles("USER")
+//					.build());
+//	}
 }
 
 /**
@@ -392,3 +375,50 @@ class SubjectAttributeUserTokenConverter extends DefaultUserAuthenticationConver
 //		return converted;
 //	}
 //}
+
+class MyUserDetailService implements UserDetailsService {
+	/**  * 根据用户名获取用户 - 用户的角色、权限等信息   */
+
+	@Bean
+	public PasswordEncoder passwordEncoder(){
+		return new BCryptPasswordEncoder();
+	}
+
+	@Override
+	public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
+
+//		// 根据用户名查询数据库，查到对应的用户
+//		MyUser myUser = authenticationMapper.loadUserByUsername(name);
+//		// ... 做一些异常处理，没有找到用户之类的
+//		if (myUser == null) {
+//			throw new UsernameNotFoundException("用户不存在");
+//		}
+//		// 根据用户ID，查询用户的角色
+//		List<Role> roles = authenticationMapper.findRoleByUserId(myUser.getId());
+//		// 添加角色
+//		List<GrantedAuthority> authorities = new ArrayList<>();
+//		for (Role role : roles) {
+//			authorities.add(new SimpleGrantedAuthority(role.getName()));
+//		}
+//		// 构建 Security 的 User 对象
+//		return new User(myUser.getName(), myUser.getPassword(), authorities);
+
+		UserDetails userDetails = null;
+		try {
+			Collection<GrantedAuthority> authList = getAuthorities();
+			String pass = passwordEncoder().encode("12345678");
+			userDetails = new User("lihua", pass,true,true,true,true,authList);
+		}catch (Exception e) {
+			e.printStackTrace();
+		}
+		return userDetails;
+	}
+
+	/**  * 获取用户的角色权限,为了降低实验的难度，这里去掉了根据用户名获取角色的步骤     * @param    * @return   */
+	private Collection<GrantedAuthority> getAuthorities(){
+		List<GrantedAuthority> authList = new ArrayList<GrantedAuthority>();
+		authList.add(new SimpleGrantedAuthority("ROLE_USER"));
+		authList.add(new SimpleGrantedAuthority("ROLE_ADMIN"));
+		return authList;
+	}
+}
