@@ -195,6 +195,7 @@ public class AuthorizationServerConfiguration extends AuthorizationServerConfigu
 	 * <p>注意，自定义TokenServices的时候，需要设置@Primary，否则报错，</p>
 	 * @return
 	 */
+
 	@Primary
 	@Bean
 	public DefaultTokenServices defaultTokenServices() {
