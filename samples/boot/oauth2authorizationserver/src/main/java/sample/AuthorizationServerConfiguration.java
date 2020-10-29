@@ -34,6 +34,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
 import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.AuthenticationProvider;
 import org.springframework.security.config.annotation.authentication.builders.AuthenticationManagerBuilder;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -71,6 +72,7 @@ import org.springframework.security.oauth2.provider.token.store.InMemoryTokenSto
 import org.springframework.security.oauth2.provider.token.store.JwtAccessTokenConverter;
 import org.springframework.security.oauth2.provider.token.store.JwtTokenStore;
 import org.springframework.security.provisioning.InMemoryUserDetailsManager;
+import org.springframework.stereotype.Component;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -92,6 +94,10 @@ import org.springframework.web.bind.annotation.ResponseBody;
 @EnableAuthorizationServer
 @Configuration
 public class AuthorizationServerConfiguration extends AuthorizationServerConfigurerAdapter {
+
+	public PasswordEncoder passwordEncoder(){
+		return new BCryptPasswordEncoder();
+	}
 
 	AuthenticationManager authenticationManager;
 	KeyPair keyPair;
@@ -173,12 +179,13 @@ public class AuthorizationServerConfiguration extends AuthorizationServerConfigu
 //		details.setClientSecret(UUID.randomUUID().toString());
 		details.setClientId("demo");
 		details.setClientSecret("{noop}secret");
+//		details.setClientSecret(passwordEncoder().encode("secret"));
 		details.setAuthorizedGrantTypes(Arrays.asList("authorization_code", "password", "client_credentials","implicit", "refresh_token"));
 		details.setScope(Arrays.asList("message:read"));
 //		details.setAuthorities(AuthorityUtils.commaSeparatedStringToAuthorityList("ROLE_USER"));
 		details.setRegisteredRedirectUri(Collections.<String>emptySet());
-		details.setAccessTokenValiditySeconds(10);
-		details.setRefreshTokenValiditySeconds(20);
+//		details.setAccessTokenValiditySeconds(10);
+//		details.setRefreshTokenValiditySeconds(20);
 		map.put(details.getClientId(),details);
 		InMemoryClientDetailsService.setClientDetailsStore(map);
 		return InMemoryClientDetailsService;
@@ -225,31 +232,53 @@ class UserConfig extends WebSecurityConfigurerAdapter {
 
 	@Override
 	protected void configure(AuthenticationManagerBuilder auth) throws Exception {
-		// 加入自定义的安全认证
-		auth.userDetailsService(new MyUserDetailService())
-			.passwordEncoder(this.passwordEncoder())
+//		auth.userDetailsService(new MyUserDetailService())
+//			.passwordEncoder(new BCryptPasswordEncoder())
 //			.and()
-			//添加自定义的认证管理类
 //			.authenticationProvider(smsAuthenticationProvider())
 //			.authenticationProvider(authenticationProvider())
 		;
 	}
 
 	@Bean
-	public PasswordEncoder passwordEncoder(){
-		return new BCryptPasswordEncoder();
-	}
-
-//	@Bean
-//	@Override
-//	public UserDetailsService userDetailsService() {
+	@Override
+	public UserDetailsService userDetailsService() {
 //		return new InMemoryUserDetailsManager(
-//				User.withDefaultPasswordEncoder()
-//					.username("subject")
-//					.password("password")
-//					.roles("USER")
-//					.build());
-//	}
+//			User.withDefaultPasswordEncoder()
+//				.username("lihua")
+//				.password("12345678")
+//				.roles("USER")
+//				.build());
+//		}
+		return new MyUserDetailService();
+	}
+}
+
+class MyUserDetailService implements UserDetailsService {
+	@Override
+	public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
+
+//		// 根据用户名查询数据库，查到对应的用户
+//		MyUser myUser = authenticationMapper.loadUserByUsername(name);
+//		// ... 做一些异常处理，没有找到用户之类的
+//		if (myUser == null) {
+//			throw new UsernameNotFoundException("用户不存在");
+//		}
+//		// 根据用户ID，查询用户的角色
+//		List<Role> roles = authenticationMapper.findRoleByUserId(myUser.getId());
+//		// 添加角色
+//		List<GrantedAuthority> authorities = new ArrayList<>();
+//		for (Role role : roles) {
+//			authorities.add(new SimpleGrantedAuthority(role.getName()));
+//		}
+//		// 构建 Security 的 User 对象
+//		return new User(myUser.getName(), myUser.getPassword(), authorities);
+
+		List<GrantedAuthority> authList = new ArrayList<GrantedAuthority>();
+		authList.add(new SimpleGrantedAuthority("USER"));
+		UserDetails userDetails = new User("lihua", "{noop}12345678",authList);
+		return userDetails;
+	}
 }
 
 /**
@@ -376,49 +405,3 @@ class SubjectAttributeUserTokenConverter extends DefaultUserAuthenticationConver
 //	}
 //}
 
-class MyUserDetailService implements UserDetailsService {
-	/**  * 根据用户名获取用户 - 用户的角色、权限等信息   */
-
-	@Bean
-	public PasswordEncoder passwordEncoder(){
-		return new BCryptPasswordEncoder();
-	}
-
-	@Override
-	public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
-
-//		// 根据用户名查询数据库，查到对应的用户
-//		MyUser myUser = authenticationMapper.loadUserByUsername(name);
-//		// ... 做一些异常处理，没有找到用户之类的
-//		if (myUser == null) {
-//			throw new UsernameNotFoundException("用户不存在");
-//		}
-//		// 根据用户ID，查询用户的角色
-//		List<Role> roles = authenticationMapper.findRoleByUserId(myUser.getId());
-//		// 添加角色
-//		List<GrantedAuthority> authorities = new ArrayList<>();
-//		for (Role role : roles) {
-//			authorities.add(new SimpleGrantedAuthority(role.getName()));
-//		}
-//		// 构建 Security 的 User 对象
-//		return new User(myUser.getName(), myUser.getPassword(), authorities);
-
-		UserDetails userDetails = null;
-		try {
-			Collection<GrantedAuthority> authList = getAuthorities();
-			String pass = passwordEncoder().encode("12345678");
-			userDetails = new User("lihua", pass,true,true,true,true,authList);
-		}catch (Exception e) {
-			e.printStackTrace();
-		}
-		return userDetails;
-	}
-
-	/**  * 获取用户的角色权限,为了降低实验的难度，这里去掉了根据用户名获取角色的步骤     * @param    * @return   */
-	private Collection<GrantedAuthority> getAuthorities(){
-		List<GrantedAuthority> authList = new ArrayList<GrantedAuthority>();
-		authList.add(new SimpleGrantedAuthority("ROLE_USER"));
-		authList.add(new SimpleGrantedAuthority("ROLE_ADMIN"));
-		return authList;
-	}
-}
