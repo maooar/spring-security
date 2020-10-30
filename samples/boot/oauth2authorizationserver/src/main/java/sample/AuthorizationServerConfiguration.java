@@ -49,6 +49,7 @@ import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.oauth2.common.DefaultOAuth2AccessToken;
 import org.springframework.security.oauth2.common.OAuth2AccessToken;
 import org.springframework.security.oauth2.config.annotation.builders.ClientDetailsServiceBuilder;
 import org.springframework.security.oauth2.config.annotation.builders.InMemoryClientDetailsServiceBuilder;
@@ -64,10 +65,7 @@ import org.springframework.security.oauth2.provider.client.BaseClientDetails;
 import org.springframework.security.oauth2.provider.client.InMemoryClientDetailsService;
 import org.springframework.security.oauth2.provider.client.JdbcClientDetailsService;
 import org.springframework.security.oauth2.provider.endpoint.FrameworkEndpoint;
-import org.springframework.security.oauth2.provider.token.DefaultAccessTokenConverter;
-import org.springframework.security.oauth2.provider.token.DefaultTokenServices;
-import org.springframework.security.oauth2.provider.token.DefaultUserAuthenticationConverter;
-import org.springframework.security.oauth2.provider.token.TokenStore;
+import org.springframework.security.oauth2.provider.token.*;
 import org.springframework.security.oauth2.provider.token.store.InMemoryTokenStore;
 import org.springframework.security.oauth2.provider.token.store.JwtAccessTokenConverter;
 import org.springframework.security.oauth2.provider.token.store.JwtTokenStore;
@@ -95,81 +93,38 @@ import org.springframework.web.bind.annotation.ResponseBody;
 @Configuration
 public class AuthorizationServerConfiguration extends AuthorizationServerConfigurerAdapter {
 
-	public PasswordEncoder passwordEncoder(){
-		return new BCryptPasswordEncoder();
-	}
-
 	AuthenticationManager authenticationManager;
-	KeyPair keyPair;
-	boolean jwtEnabled;
-	TokenStore tokenStore;
+	@Value("${security.oauth2.authorizationserver.jwt.enabled:true}")
+	private boolean jwtEnabled;
+	private KeyPair keyPair;
+	private TokenStore tokenStore;
+	private JwtAccessTokenConverter jwtAccessTokenConverter;
+	private SubjectAttributeUserTokenConverter subjectAttributeUserTokenConverter;
+	private MyUserDetailService myUserDetailService;
+	private CustomTokenEnhancer customTokenEnhancer;
 
 	public AuthorizationServerConfiguration(
 			AuthenticationConfiguration authenticationConfiguration,
 			KeyPair keyPair,
-			@Value("${security.oauth2.authorizationserver.jwt.enabled:true}") boolean jwtEnabled) throws Exception {
-
+			TokenStore tokenStore,
+			JwtAccessTokenConverter jwtAccessTokenConverter,
+			SubjectAttributeUserTokenConverter subjectAttributeUserTokenConverter,
+			MyUserDetailService myUserDetailService,
+			CustomTokenEnhancer customTokenEnhancer
+		) throws Exception {
 		this.authenticationManager = authenticationConfiguration.getAuthenticationManager();
 		this.keyPair = keyPair;
-		this.jwtEnabled = jwtEnabled;
+		this.tokenStore = tokenStore;
+		this.jwtAccessTokenConverter = jwtAccessTokenConverter;
+		this.subjectAttributeUserTokenConverter = subjectAttributeUserTokenConverter;
+		this.keyPair = keyPair;
+		this.myUserDetailService = myUserDetailService;
+		this.customTokenEnhancer = customTokenEnhancer;
 	}
 
 	@Override
 	public void configure(ClientDetailsServiceConfigurer clients)
 			throws Exception {
-		clients.withClientDetails(clientDetails());
-	}
-
-	@Override
-	public void configure(AuthorizationServerEndpointsConfigurer endpoints) {
-		// @formatter:off
-		endpoints
-			.authenticationManager(this.authenticationManager)
-			.tokenStore(tokenStore());
-
-		if (this.jwtEnabled) {
-			endpoints
-				.accessTokenConverter(accessTokenConverter());
-		}
-		// @formatter:on
-	}
-
-	@Override
-	public void configure(AuthorizationServerSecurityConfigurer oauthServer) throws Exception {
-		oauthServer
-//			.realm("oauth2-resources")
-//			url:/oauth/token_key,exposes public key for token verification if using JWT tokens
-//			.tokenKeyAccess("permitAll()")
-//			url:/oauth/check_token allow check token
-//			.checkTokenAccess("isAuthenticated()")
-			.allowFormAuthenticationForClients();
-	}
-
-	@Bean
-	public TokenStore tokenStore() {
-		if(this.tokenStore != null) {
-			return this.tokenStore;
-		}
-		if (this.jwtEnabled) {
-			this.tokenStore = new JwtTokenStore(accessTokenConverter());
-		} else {
-			this.tokenStore = new InMemoryTokenStore();
-		}
-		return this.tokenStore;
-	}
-
-	@Bean
-	public JwtAccessTokenConverter accessTokenConverter() {
-		DefaultAccessTokenConverter accessTokenConverter = new DefaultAccessTokenConverter();
-		accessTokenConverter.setUserTokenConverter(new SubjectAttributeUserTokenConverter());
-		JwtAccessTokenConverter converter = new JwtAccessTokenConverter();
-		converter.setKeyPair(this.keyPair);
-		converter.setAccessTokenConverter(accessTokenConverter);
-		return converter;
-	}
-
-	@Bean
-	public ClientDetailsService clientDetails() {
 //		JdbcClientDetailsService jdbcClientDetailsService=new JdbcClientDetailsService(dataSource);
 //		jdbcClientDetailsService.setPasswordEncoder(new BCryptPasswordEncoder());
 		InMemoryClientDetailsService InMemoryClientDetailsService=new InMemoryClientDetailsService();
@@ -188,28 +143,47 @@ public class AuthorizationServerConfiguration extends AuthorizationServerConfigu
 //		details.setRefreshTokenValiditySeconds(20);
 		map.put(details.getClientId(),details);
 		InMemoryClientDetailsService.setClientDetailsStore(map);
-		return InMemoryClientDetailsService;
+		clients.withClientDetails(InMemoryClientDetailsService);
 	}
 
-	/**
-	 * <p>注意，自定义TokenServices的时候，需要设置@Primary，否则报错，</p>
-	 * @return
-	 */
-
-	@Primary
-	@Bean
-	public DefaultTokenServices defaultTokenServices() {
-		DefaultTokenServices tokenServices = new DefaultTokenServices();
-		tokenServices.setTokenStore(tokenStore());
-		tokenServices.setSupportRefreshToken(true);
-		tokenServices.setClientDetailsService(clientDetails());
-		// token有效期自定义设置，默认12小时
-		tokenServices.setAccessTokenValiditySeconds(60 * 60 * 12);
-		//默认30天，这里修改
-		tokenServices.setRefreshTokenValiditySeconds(60 * 60 * 24 * 7);
-		tokenServices.setReuseRefreshToken(false);
-		return tokenServices;
+	@Override
+	public void configure(AuthorizationServerEndpointsConfigurer endpoints) {
+		endpoints.authenticationManager(this.authenticationManager);
+		endpoints.tokenStore(tokenStore);
+		if (jwtEnabled) {
+			endpoints.accessTokenConverter(jwtAccessTokenConverter);
+			endpoints.userDetailsService(myUserDetailService);
+		}
+		TokenEnhancerChain tokenEnhancerChain = new TokenEnhancerChain();
+		List<TokenEnhancer> delegates = new ArrayList<>();
+		delegates.add(customTokenEnhancer);
+		delegates.add(jwtAccessTokenConverter);
+		tokenEnhancerChain.setTokenEnhancers(delegates);
+		endpoints.tokenEnhancer(tokenEnhancerChain);
 	}
+
+	@Override
+	public void configure(AuthorizationServerSecurityConfigurer oauthServer) throws Exception {
+		oauthServer
+//			.realm("oauth2-resources")
+//			url:/oauth/token_key,exposes public key for token verification if using JWT tokens
+//			.tokenKeyAccess("permitAll()")
+//			url:/oauth/check_token allow check token
+//			.checkTokenAccess("isAuthenticated()")
+			.allowFormAuthenticationForClients();
+	}
+
+//	@Primary
+//	@Bean
+//	public DefaultTokenServices defaultTokenServices() {
+//		DefaultTokenServices tokenServices = new DefaultTokenServices();
+//		tokenServices.setTokenStore(tokenStore);
+//		tokenServices.setSupportRefreshToken(true);
+//		tokenServices.setAccessTokenValiditySeconds(60 * 60 * 12);
+//		tokenServices.setRefreshTokenValiditySeconds(60 * 60 * 24 * 7);
+//		tokenServices.setReuseRefreshToken(false);
+//		return tokenServices;
+//	}
 }
 
 /**
@@ -217,6 +191,11 @@ public class AuthorizationServerConfiguration extends AuthorizationServerConfigu
  */
 @Configuration
 class UserConfig extends WebSecurityConfigurerAdapter {
+	private MyUserDetailService myUserDetailService;
+
+	UserConfig(MyUserDetailService myUserDetailService){
+		this.myUserDetailService = myUserDetailService;
+	}
 
 	@Override
 	protected void configure(HttpSecurity http) throws Exception {
@@ -241,20 +220,13 @@ class UserConfig extends WebSecurityConfigurerAdapter {
 		;
 	}
 
-	@Bean
 	@Override
 	public UserDetailsService userDetailsService() {
-//		return new InMemoryUserDetailsManager(
-//			User.withDefaultPasswordEncoder()
-//				.username("lihua")
-//				.password("12345678")
-//				.roles("USER")
-//				.build());
-//		}
-		return new MyUserDetailService();
+		return myUserDetailService;
 	}
 }
 
+@Component
 class MyUserDetailService implements UserDetailsService {
 	@Override
 	public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
@@ -290,6 +262,7 @@ class MyUserDetailService implements UserDetailsService {
  */
 @FrameworkEndpoint
 class IntrospectEndpoint {
+
 	TokenStore tokenStore;
 
 	IntrospectEndpoint(TokenStore tokenStore) {
@@ -334,20 +307,30 @@ class JwkSetEndpoint {
 	@GetMapping("/.well-known/jwks.json")
 	@ResponseBody
 	public Map<String, Object> getKey() {
-		RSAPublicKey publicKey = (RSAPublicKey) this.keyPair.getPublic();
+		RSAPublicKey publicKey = (RSAPublicKey) keyPair.getPublic();
 		RSAKey key = new RSAKey.Builder(publicKey).build();
 		return new JWKSet(key).toJSONObject();
 	}
 }
 
-/**
- * An Authorization Server will more typically have a key rotation strategy, and the keys will not
- * be hard-coded into the application code.
- *
- * For simplicity, though, this sample doesn't demonstrate key rotation.
- */
+
 @Configuration
-class KeyConfig {
+class Config {
+
+	@Value("${security.oauth2.authorizationserver.jwt.enabled:true}")
+	private boolean jwtEnabled;
+	private SubjectAttributeUserTokenConverter subjectAttributeUserTokenConverter;
+
+	Config(SubjectAttributeUserTokenConverter subjectAttributeUserTokenConverter) {
+		this.subjectAttributeUserTokenConverter = subjectAttributeUserTokenConverter;
+	}
+
+	/**
+	 * An Authorization Server will more typically have a key rotation strategy, and the keys will not
+	 * be hard-coded into the application code.
+	 *
+	 * For simplicity, though, this sample doesn't demonstrate key rotation.
+	 */
 	@Bean
 	KeyPair keyPair() {
 		try {
@@ -363,6 +346,48 @@ class KeyConfig {
 			throw new IllegalArgumentException(e);
 		}
 	}
+
+	@Bean
+	public TokenStore tokenStore() {
+		if (jwtEnabled) {
+			return new JwtTokenStore(jwtAccessTokenConverter());
+		} else {
+			return new InMemoryTokenStore();
+		}
+	}
+
+	@Bean
+	public AccessTokenConverter AccessTokenConverter() {
+		DefaultAccessTokenConverter datc = new DefaultAccessTokenConverter();
+		datc.setUserTokenConverter(subjectAttributeUserTokenConverter);
+		return datc;
+	}
+
+	@Bean
+	public JwtAccessTokenConverter jwtAccessTokenConverter() {
+//		DefaultAccessTokenConverter datc = new DefaultAccessTokenConverter();
+		//TODO refreshToken时subjectAttributeUserTokenConverter失效？？
+//		datc.setUserTokenConverter(subjectAttributeUserTokenConverter);
+		JwtAccessTokenConverter jatc = new JwtAccessTokenConverter();
+		jatc.setKeyPair(keyPair());
+//		jatc.setAccessTokenConverter(datc);
+		return jatc;
+	}
+}
+
+//向JSON WEB TOKEN中插入自定义字段
+@Component
+class CustomTokenEnhancer implements TokenEnhancer {
+	@Override
+	public OAuth2AccessToken enhance(OAuth2AccessToken oAuth2AccessToken, OAuth2Authentication oAuth2Authentication) {
+		final Map<String, Object> additionalInfo = new HashMap<>();
+		//获取登录信息
+		UserDetails user = (UserDetails) oAuth2Authentication.getUserAuthentication().getPrincipal();
+		additionalInfo.put("userName", user.getUsername());
+//		additionalInfo.put("authorities", user.getAuthorities());
+		((DefaultOAuth2AccessToken) oAuth2AccessToken).setAdditionalInformation(additionalInfo);
+		return oAuth2AccessToken;
+	}
 }
 
 /**
@@ -371,6 +396,9 @@ class KeyConfig {
  * better to adhere to the {@code sub} property defined in the
  * <a target="_blank" href="https://tools.ietf.org/html/rfc7519">JWT Specification</a>.
  */
+//修改user_name字段名称
+//TODO JwtAccessTokenConverter模式下，修改以后refreshToken会丢失该字段？
+@Component
 class SubjectAttributeUserTokenConverter extends DefaultUserAuthenticationConverter {
 	@Override
 	public Map<String, ?> convertUserAuthentication(Authentication authentication) {
