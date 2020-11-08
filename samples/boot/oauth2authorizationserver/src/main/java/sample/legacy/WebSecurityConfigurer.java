@@ -4,7 +4,6 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.authentication.builders.AuthenticationManagerBuilder;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.WebSecurityConfigurerAdapter;
-import org.springframework.security.core.userdetails.UserDetailsService;
 
 /**
  * For configuring the end users recognized by this Authorization Server
@@ -13,26 +12,26 @@ import org.springframework.security.core.userdetails.UserDetailsService;
 public class WebSecurityConfigurer extends WebSecurityConfigurerAdapter {
 	private FeignUserDetailService feignUserDetailService;
 
-	WebSecurityConfigurer(FeignUserDetailService myUserDetailService){
-		this.feignUserDetailService = myUserDetailService;
+	WebSecurityConfigurer(FeignUserDetailService feignUserDetailService){
+		this.feignUserDetailService = feignUserDetailService;
 	}
 
 	@Override
 	protected void configure(HttpSecurity http) throws Exception {
 		http
-			.authorizeRequests()
-			.mvcMatchers("/.well-known/jwks.json")
-			.permitAll()
-			.anyRequest().authenticated()
-			.and()
-			.httpBasic()
-			.and()
-			.csrf().ignoringRequestMatchers((request) -> "/introspect".equals(request.getRequestURI()));
+				.authorizeRequests()
+				.mvcMatchers("/.well-known/jwks.json")
+				.permitAll()
+				.anyRequest().authenticated()
+				.and()
+				.httpBasic()
+				.and()
+				.csrf().ignoringRequestMatchers((request) -> "/introspect".equals(request.getRequestURI()));
 	}
 
 	@Override
 	protected void configure(AuthenticationManagerBuilder auth) throws Exception {
-//		auth.userDetailsService(new MyUserDetailService())
+		auth.userDetailsService(feignUserDetailService)
 //			.passwordEncoder(new BCryptPasswordEncoder())
 //			.and()
 //			.authenticationProvider(smsAuthenticationProvider())
@@ -40,8 +39,17 @@ public class WebSecurityConfigurer extends WebSecurityConfigurerAdapter {
 		;
 	}
 
-	@Override
-	public UserDetailsService userDetailsService() {
-		return feignUserDetailService;
-	}
+//	@Bean
+//	@Override
+//	public UserDetailsService userDetailsService() {
+////		return feignUserDetailService;
+//
+//		return new InMemoryUserDetailsManager(
+//				User.withDefaultPasswordEncoder()
+//						.username("lihua")
+//						.password("12345678")
+//						.roles("ADMIN")
+//						.build());
+//	}
+
 }

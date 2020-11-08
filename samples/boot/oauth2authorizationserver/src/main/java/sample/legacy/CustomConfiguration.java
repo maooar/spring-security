@@ -9,7 +9,6 @@ import org.springframework.security.oauth2.provider.token.TokenStore;
 import org.springframework.security.oauth2.provider.token.store.InMemoryTokenStore;
 import org.springframework.security.oauth2.provider.token.store.JwtAccessTokenConverter;
 import org.springframework.security.oauth2.provider.token.store.JwtTokenStore;
-
 import java.math.BigInteger;
 import java.security.KeyFactory;
 import java.security.KeyPair;
@@ -21,11 +20,6 @@ public class CustomConfiguration {
 
 	@Value("${security.oauth2.authorizationserver.jwt.enabled:true}")
 	private boolean jwtEnabled;
-	private SubjectAttributeUserTokenConverter subjectAttributeUserTokenConverter;
-
-	CustomConfiguration(SubjectAttributeUserTokenConverter subjectAttributeUserTokenConverter) {
-		this.subjectAttributeUserTokenConverter = subjectAttributeUserTokenConverter;
-	}
 
 	/**
 	 * An Authorization Server will more typically have a key rotation strategy, and the keys will not
@@ -60,7 +54,7 @@ public class CustomConfiguration {
 	@Bean
 	public AccessTokenConverter AccessTokenConverter() {
 		DefaultAccessTokenConverter datc = new DefaultAccessTokenConverter();
-		datc.setUserTokenConverter(subjectAttributeUserTokenConverter);
+		datc.setUserTokenConverter(subjectAttributeUserTokenConverter());
 		return datc;
 	}
 
@@ -68,10 +62,20 @@ public class CustomConfiguration {
 	public JwtAccessTokenConverter jwtAccessTokenConverter() {
 //		DefaultAccessTokenConverter datc = new DefaultAccessTokenConverter();
 		//TODO refreshToken时subjectAttributeUserTokenConverter失效？？
-//		datc.setUserTokenConverter(subjectAttributeUserTokenConverter);
+//		datc.setUserTokenConverter(subjectAttributeUserTokenConverter());
 		JwtAccessTokenConverter jatc = new JwtAccessTokenConverter();
 		jatc.setKeyPair(keyPair());
 //		jatc.setAccessTokenConverter(datc);
 		return jatc;
+	}
+
+	@Bean
+	public SubjectAttributeUserTokenConverter subjectAttributeUserTokenConverter() {
+		return new SubjectAttributeUserTokenConverter();
+	}
+
+	@Bean
+	public FeignUserDetailService feignUserDetailService() {
+		return new FeignUserDetailService();
 	}
 }

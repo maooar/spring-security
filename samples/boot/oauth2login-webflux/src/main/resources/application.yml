@@ -28,7 +28,7 @@ spring:
             client-id: your-app-client-id
             client-secret: your-app-client-secret
           springoauth2authserver:
-            client-id: authorizedCode
+            client-id: demo
             client-secret: secret
             authorizationGrantType: authorization_code
             scope: message:read

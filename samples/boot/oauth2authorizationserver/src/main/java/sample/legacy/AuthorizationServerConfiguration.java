@@ -19,6 +19,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
+import org.springframework.security.core.userdetails.User;
 import org.springframework.security.oauth2.config.annotation.configurers.ClientDetailsServiceConfigurer;
 import org.springframework.security.oauth2.config.annotation.web.configuration.AuthorizationServerConfigurerAdapter;
 import org.springframework.security.oauth2.config.annotation.web.configuration.EnableAuthorizationServer;
@@ -31,6 +32,8 @@ import org.springframework.security.oauth2.provider.token.TokenEnhancer;
 import org.springframework.security.oauth2.provider.token.TokenEnhancerChain;
 import org.springframework.security.oauth2.provider.token.TokenStore;
 import org.springframework.security.oauth2.provider.token.store.JwtAccessTokenConverter;
+import org.springframework.security.provisioning.InMemoryUserDetailsManager;
+import org.springframework.util.CollectionUtils;
 
 import java.security.KeyPair;
 import java.util.*;
@@ -58,7 +61,6 @@ public class AuthorizationServerConfiguration extends AuthorizationServerConfigu
 	private KeyPair keyPair;
 	private TokenStore tokenStore;
 	private JwtAccessTokenConverter jwtAccessTokenConverter;
-	private SubjectAttributeUserTokenConverter subjectAttributeUserTokenConverter;
 	private FeignUserDetailService feignUserDetailService;
 	private CustomTokenEnhancer customTokenEnhancer;
 
@@ -67,7 +69,6 @@ public class AuthorizationServerConfiguration extends AuthorizationServerConfigu
 			KeyPair keyPair,
 			TokenStore tokenStore,
 			JwtAccessTokenConverter jwtAccessTokenConverter,
-			SubjectAttributeUserTokenConverter subjectAttributeUserTokenConverter,
 			FeignUserDetailService feignUserDetailService,
 			CustomTokenEnhancer customTokenEnhancer
 	) throws Exception {
@@ -75,7 +76,6 @@ public class AuthorizationServerConfiguration extends AuthorizationServerConfigu
 		this.keyPair = keyPair;
 		this.tokenStore = tokenStore;
 		this.jwtAccessTokenConverter = jwtAccessTokenConverter;
-		this.subjectAttributeUserTokenConverter = subjectAttributeUserTokenConverter;
 		this.keyPair = keyPair;
 		this.feignUserDetailService = feignUserDetailService;
 		this.customTokenEnhancer = customTokenEnhancer;
@@ -98,7 +98,7 @@ public class AuthorizationServerConfiguration extends AuthorizationServerConfigu
 		details.setAuthorizedGrantTypes(Arrays.asList("authorization_code", "password", "client_credentials","implicit", "refresh_token"));
 		details.setScope(Arrays.asList("message:read"));
 //		details.setAuthorities(AuthorityUtils.commaSeparatedStringToAuthorityList("ROLE_USER"));
-		details.setRegisteredRedirectUri(Collections.<String>emptySet());
+		details.setRegisteredRedirectUri(new HashSet<String>(Arrays.asList("www.baidu.com")));
 //		details.setAccessTokenValiditySeconds(10);
 //		details.setRefreshTokenValiditySeconds(20);
 

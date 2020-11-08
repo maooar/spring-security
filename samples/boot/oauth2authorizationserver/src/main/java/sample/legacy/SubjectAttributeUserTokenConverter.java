@@ -16,7 +16,6 @@ import java.util.Map;
  */
 //修改user_name字段名称
 //TODO JwtAccessTokenConverter模式下，修改以后refreshToken会丢失该字段？
-@Component
 public class SubjectAttributeUserTokenConverter extends DefaultUserAuthenticationConverter {
 	@Override
 	public Map<String, ?> convertUserAuthentication(Authentication authentication) {
